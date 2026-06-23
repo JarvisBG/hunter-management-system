@@ -4,7 +4,8 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
-const ADMIN_PASSWORD = 'GameMaster28';
+// Utilise la variable d'environnement si elle existe, sinon utilise 'GameMaster28' par défaut
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'GameMaster28';
 
 export async function adminLogin(formData: FormData) {
   const password = formData.get('password') as string;

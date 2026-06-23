@@ -168,6 +168,26 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
+  const handleDeleteCandidate = async (id: string) => {
+    if (!window.confirm(`Êtes-vous sûr de vouloir supprimer DÉFINITIVEMENT le candidat #${id} ? Toute sa progression sera perdue.`)) {
+      return;
+    }
+    
+    // Pour éviter les erreurs de contrainte (foreign keys), on supprime d'abord les références non-cascade si besoin
+    // Eggs (qui n'a pas ON DELETE CASCADE)
+    await supabase.from('eggs').update({ claimed_by: null }).eq('claimed_by', id);
+    // Duels (qui n'a pas ON DELETE CASCADE)
+    await supabase.from('duels').delete().or(`player1_id.eq.${id},player2_id.eq.${id}`);
+
+    const { error } = await supabase.from('candidates').delete().eq('id', id);
+    
+    if (error) {
+      alert("Erreur lors de la suppression : " + error.message);
+    } else {
+      fetchCandidates();
+    }
+  };
+
   const counts = useMemo(
     () => ({
       total: candidates.length,
@@ -485,23 +505,37 @@ export default function AdminDashboard() {
                   className="w-full text-sm text-[#9AA0A6] file:mr-4 file:py-2 file:px-4 file:rounded-md file:border file:border-[#D9A441]/30 file:text-xs file:font-bold file:bg-[#D9A441]/10 file:text-[#D9A441] hover:file:bg-[#D9A441]/20 file:transition-colors cursor-pointer"
                 />
               </div>
-              <div className="flex gap-4 mt-6">
+              <div className="flex flex-col gap-3 mt-6">
+                <div className="flex gap-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCandidate(null);
+                      setEditFile(null);
+                    }}
+                    className={`${display.className} flex-1 border border-[#232931] text-[#9AA0A6] hover:bg-[#232931] hover:text-[#E8E6E1] py-3 rounded-lg uppercase tracking-widest font-bold transition-colors`}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={editLoading}
+                    className={`${display.className} flex-1 bg-[#D9A441] hover:bg-[#C2922F] text-[#0B0E11] py-3 rounded-lg uppercase tracking-widest font-bold disabled:opacity-50 transition-colors`}
+                  >
+                    {editLoading ? 'Sauvegarde...' : 'Sauvegarder'}
+                  </button>
+                </div>
+                
+                {/* Bouton de suppression */}
                 <button
                   type="button"
                   onClick={() => {
+                    handleDeleteCandidate(editingCandidate.id);
                     setEditingCandidate(null);
-                    setEditFile(null);
                   }}
-                  className={`${display.className} flex-1 border border-[#232931] text-[#9AA0A6] hover:bg-[#232931] hover:text-[#E8E6E1] py-3 rounded-lg uppercase tracking-widest font-bold transition-colors`}
+                  className={`${display.className} w-full mt-4 border border-[#E0524F]/30 bg-[#1A0E0E] text-[#E0524F] hover:bg-[#E0524F] hover:text-[#0B0E11] py-2 rounded-lg uppercase tracking-widest font-bold text-xs transition-colors`}
                 >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={editLoading}
-                  className={`${display.className} flex-1 bg-[#D9A441] hover:bg-[#C2922F] text-[#0B0E11] py-3 rounded-lg uppercase tracking-widest font-bold disabled:opacity-50 transition-colors`}
-                >
-                  {editLoading ? 'Sauvegarde...' : 'Sauvegarder'}
+                  Supprimer le Candidat DÉFINITIVEMENT
                 </button>
               </div>
             </form>
