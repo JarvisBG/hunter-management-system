@@ -97,6 +97,23 @@ export default function StepsController() {
     const confirmation = window.confirm(msg);
     if (!confirmation) return;
 
+    if (stepId > 0) {
+      const wipe = window.confirm(`Veux-tu RÉINITIALISER complètement l'Étape ${stepId} (effacer toutes les données précédentes) ?\n\nClique sur [OK] pour tout effacer et repartir de zéro.\nClique sur [Annuler] pour simplement changer d'écran sans effacer les données.`);
+      if (wipe) {
+        if (stepId === 1) {
+          await supabase.from('eggs').delete().not('id', 'is', null);
+        } else if (stepId === 2) {
+          await supabase.from('duels').delete().not('id', 'is', null);
+        } else if (stepId === 3) {
+          await supabase.from('cuisine_scores').delete().not('id', 'is', null);
+          await supabase.from('cuisine_dishes').delete().not('id', 'is', null);
+        } else if (stepId === 4) {
+          await supabase.from('badge_targets').delete().not('candidate_id', 'is', null);
+          await supabase.from('badge_hunts').delete().not('id', 'is', null);
+        }
+      }
+    }
+
     const { error } = await supabase
       .from('global_config')
       .update({ active_step_id: stepId })

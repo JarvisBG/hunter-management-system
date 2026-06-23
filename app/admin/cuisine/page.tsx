@@ -1,19 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Oswald, JetBrains_Mono } from 'next/font/google';
+import { supabase } from '@/lib/supabase';
 
 const display = Oswald({ subsets: ['latin'], weight: ['500', '600', '700'] });
 const mono = JetBrains_Mono({ subsets: ['latin'], weight: ['400', '500', '700'] });
 
-// Fausses données : Plats soumis par les candidats (Règle 7)
-const MOCK_SUBMISSIONS = [
-  { id: '405', name: 'Gon Freecss',    photo: 'https://i.pinimg.com/736x/87/a7/6c/87a76c66914562c5e5330de9910dd2b6.jpg', dishName: 'Porc rôti aux pommes',         status: 'pending' },
-  { id: '404', name: 'Kurapika',       photo: 'https://i.pinimg.com/736x/60/0a/63/600a6311de1b453e00cfbe31d6833c84.jpg', dishName: 'Sushi de poisson des cavernes', status: 'pending' },
-  { id: '99',  name: 'Killua Zoldyck', photo: 'https://i.pinimg.com/736x/a2/e8/cf/a2e8cfaeb63b3ea595d2c2b3e8e19c3d.jpg', dishName: 'Rien (Plat brûlé)',            status: 'pending' },
-];
-
-// ─── Coin de visée ────────────────────────────────────────────────────────────
 function Reticle({ color, size = 12 }: { color: string; size?: number }) {
   const b = 2;
   return (
@@ -26,83 +19,49 @@ function Reticle({ color, size = 12 }: { color: string; size?: number }) {
   );
 }
 
-// ─── Fond commun (scanline + vignette) ───────────────────────────────────────
 function Backdrop({ tint }: { tint?: string }) {
   return (
     <>
-      <div
-        className="pointer-events-none fixed inset-0 opacity-[0.04] z-0"
-        style={{ backgroundImage: 'repeating-linear-gradient(0deg, #fff 0px, #fff 1px, transparent 1px, transparent 3px)' }}
-      />
-      {tint && (
-        <div
-          className="pointer-events-none fixed inset-0 z-0"
-          style={{ background: `radial-gradient(ellipse at center, ${tint}, transparent 65%)` }}
-        />
-      )}
+      <div className="pointer-events-none fixed inset-0 opacity-[0.04] z-0" style={{ backgroundImage: 'repeating-linear-gradient(0deg, #fff 0px, #fff 1px, transparent 1px, transparent 3px)' }} />
+      {tint && <div className="pointer-events-none fixed inset-0 z-0" style={{ background: `radial-gradient(ellipse at center, ${tint}, transparent 65%)` }} />}
     </>
   );
 }
 
-type Submission = (typeof MOCK_SUBMISSIONS)[0];
-
-// ─── Notation par sliders avec scores contrôlés ───────────────────────────────
-function RatingForm({ sub, onDecision }: { sub: Submission; onDecision: (id: string, d: 'qualified' | 'eliminated') => void }) {
-  const [gout, setGout]       = useState(5);
+function RatingForm({ sub, onDecision }: { sub: any; onDecision: (id: string, candidateId: string, d: 'qualified' | 'eliminated', score: number) => void }) {
+  const [gout, setGout] = useState(5);
   const [presentation, setPresentation] = useState(5);
-  const moyenne = ((gout + presentation) / 2).toFixed(1);
-  const isGood  = parseFloat(moyenne) >= 6;
+  const moyenne = ((gout + presentation) / 2);
+  const isGood = moyenne >= 6;
 
   return (
     <div className="space-y-5">
-      {/* Slider Goût */}
       <div>
         <div className={`${mono.className} flex justify-between text-xs mb-2`}>
           <span className="text-[#9AA0A6] uppercase tracking-widest">Goût & Cuisson</span>
           <span className={gout >= 6 ? 'text-[#5FA876]' : 'text-[#D9A441]'}>{gout} / 10</span>
         </div>
-        <input
-          type="range" min="0" max="10" value={gout}
-          onChange={e => setGout(Number(e.target.value))}
-          className="w-full accent-[#D9A441]"
-        />
+        <input type="range" min="0" max="10" value={gout} onChange={e => setGout(Number(e.target.value))} className="w-full accent-[#D9A441]" />
       </div>
 
-      {/* Slider Présentation */}
       <div>
         <div className={`${mono.className} flex justify-between text-xs mb-2`}>
           <span className="text-[#9AA0A6] uppercase tracking-widest">Présentation</span>
           <span className={presentation >= 6 ? 'text-[#5FA876]' : 'text-[#D9A441]'}>{presentation} / 10</span>
         </div>
-        <input
-          type="range" min="0" max="10" value={presentation}
-          onChange={e => setPresentation(Number(e.target.value))}
-          className="w-full accent-[#D9A441]"
-        />
+        <input type="range" min="0" max="10" value={presentation} onChange={e => setPresentation(Number(e.target.value))} className="w-full accent-[#D9A441]" />
       </div>
 
-      {/* Moyenne */}
       <div className={`flex items-center justify-between px-4 py-2 rounded-lg border ${isGood ? 'bg-[#5FA876]/10 border-[#5FA876]/30' : 'bg-[#D9A441]/10 border-[#D9A441]/20'}`}>
-        <p className={`${mono.className} text-[10px] uppercase tracking-widest ${isGood ? 'text-[#5FA876]' : 'text-[#D9A441]'}`}>
-          Moyenne jury
-        </p>
-        <p className={`${mono.className} font-bold text-xl ${isGood ? 'text-[#5FA876]' : 'text-[#D9A441]'}`}>
-          {moyenne}
-        </p>
+        <p className={`${mono.className} text-[10px] uppercase tracking-widest ${isGood ? 'text-[#5FA876]' : 'text-[#D9A441]'}`}>Moyenne jury</p>
+        <p className={`${mono.className} font-bold text-xl ${isGood ? 'text-[#5FA876]' : 'text-[#D9A441]'}`}>{moyenne.toFixed(1)}</p>
       </div>
 
-      {/* Boutons de décision */}
       <div className="flex gap-3 pt-2 border-t border-[#1C2028]">
-        <button
-          onClick={() => onDecision(sub.id, 'eliminated')}
-          className={`${display.className} flex-1 py-2.5 bg-[#1A0E0E] text-[#E0524F] border border-[#E0524F]/30 rounded-lg hover:bg-[#E0524F] hover:text-[#0B0E11] uppercase tracking-wider text-sm transition-colors`}
-        >
+        <button onClick={() => onDecision(sub.id, sub.candidate_id, 'eliminated', moyenne)} className={`${display.className} flex-1 py-2.5 bg-[#1A0E0E] text-[#E0524F] border border-[#E0524F]/30 rounded-lg hover:bg-[#E0524F] hover:text-[#0B0E11] uppercase tracking-wider text-sm transition-colors`}>
           ✕ Éliminer
         </button>
-        <button
-          onClick={() => onDecision(sub.id, 'qualified')}
-          className={`${display.className} flex-1 py-2.5 bg-[#3FAEC4]/10 text-[#3FAEC4] border border-[#3FAEC4]/30 rounded-lg hover:bg-[#3FAEC4] hover:text-[#0B0E11] uppercase tracking-wider text-sm transition-colors`}
-        >
+        <button onClick={() => onDecision(sub.id, sub.candidate_id, 'qualified', moyenne)} className={`${display.className} flex-1 py-2.5 bg-[#3FAEC4]/10 text-[#3FAEC4] border border-[#3FAEC4]/30 rounded-lg hover:bg-[#3FAEC4] hover:text-[#0B0E11] uppercase tracking-wider text-sm transition-colors`}>
           ✓ Qualifier
         </button>
       </div>
@@ -111,11 +70,68 @@ function RatingForm({ sub, onDecision }: { sub: Submission; onDecision: (id: str
 }
 
 export default function CulinaryJuryPanel() {
-  const [submissions, setSubmissions] = useState(MOCK_SUBMISSIONS);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [candidates, setCandidates] = useState<any[]>([]);
 
-  const handleDecision = (id: string, decision: 'qualified' | 'eliminated') => {
-    if (!window.confirm(`Confirmer la décision : ${decision.toUpperCase()} pour le candidat #${id} ?`)) return;
-    setSubmissions(submissions.map(sub => sub.id === id ? { ...sub, status: decision } : sub));
+  const fetchState = async () => {
+    const { data: dData } = await supabase.from('cuisine_dishes').select('*').order('created_at', { ascending: false });
+    const { data: cData } = await supabase.from('candidates').select('*');
+    
+    if (cData) setCandidates(cData);
+    
+    if (dData && cData) {
+      const mapped = dData.map(d => ({
+        ...d,
+        candidate: cData.find(c => c.id === d.candidate_id)
+      })).filter(d => d.candidate);
+      
+      // Keep only the latest pending dish for a candidate if there are multiple pending
+      const latestPending = new Map();
+      mapped.forEach(d => {
+        if (d.status === 'pending') {
+          if (!latestPending.has(d.candidate_id)) {
+            latestPending.set(d.candidate_id, d.id);
+          }
+        }
+      });
+      
+      const filtered = mapped.filter(d => d.status !== 'pending' || latestPending.get(d.candidate_id) === d.id);
+      
+      setSubmissions(filtered);
+    } else {
+      setSubmissions([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchState();
+    const channel = supabase.channel('cuisine_admin')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cuisine_dishes' }, fetchState)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidates' }, fetchState)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  const handleDecision = async (id: string, candidateId: string, decision: 'qualified' | 'eliminated', score: number) => {
+    if (!window.confirm(`Confirmer la décision : ${decision.toUpperCase()} ?`)) return;
+    await supabase.from('cuisine_scores').insert({ dish_id: id, judge_name: 'GM', score: Math.round(score * 10) }); // store score * 10 to keep precision
+    await supabase.from('cuisine_dishes').update({ status: decision }).eq('id', id);
+    await supabase.from('candidates').update({ status: decision }).eq('id', candidateId);
+    fetchState();
+  };
+
+  const startStep = async () => {
+    if (!window.confirm("Démarrer l'épreuve ? (Cela va réinitialiser les anciens plats/notes et repasser tous les candidats en lice)")) return;
+    
+    // Reset Data
+    await supabase.from('cuisine_scores').delete().not('id', 'is', null);
+    await supabase.from('cuisine_dishes').delete().not('id', 'is', null);
+
+    const qualified = candidates.filter(c => c.status !== 'eliminated');
+    for (const c of qualified) {
+      await supabase.from('candidates').update({ status: 'active' }).eq('id', c.id);
+    }
+    fetchState();
   };
 
   const pending    = submissions.filter(s => s.status === 'pending').length;
@@ -128,7 +144,6 @@ export default function CulinaryJuryPanel() {
 
       <div className="relative z-10 max-w-5xl mx-auto p-4 md:p-8">
 
-        {/* ── Header ─────────────────────────────────────────────────────────── */}
         <header className="bg-[#11151A] border border-[#232931] border-t-0 rounded-b-3xl shadow-2xl mb-10 overflow-hidden">
           <div className="h-[3px] w-full bg-gradient-to-r from-[#3FAEC4] via-[#3FAEC4]/40 to-transparent" />
           <div className="px-6 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
@@ -144,7 +159,6 @@ export default function CulinaryJuryPanel() {
               </p>
             </div>
 
-            {/* Compteurs de statut */}
             <div className="flex gap-3">
               <div className="relative bg-[#0B0E11] border border-[#D9A441]/20 rounded-xl px-4 py-2.5 text-center min-w-[56px]">
                 <Reticle color="#D9A441" size={8} />
@@ -161,101 +175,88 @@ export default function CulinaryJuryPanel() {
               </div>
             </div>
           </div>
+          <div className="bg-[#0E1115] border-t border-[#232931] px-6 py-4 flex justify-between items-center">
+            <button onClick={startStep} className={`${mono.className} text-[10px] uppercase tracking-widest bg-[#D9A441]/10 text-[#D9A441] px-4 py-2 rounded border border-[#D9A441]/30 hover:bg-[#D9A441] hover:text-[#0B0E11] transition-colors`}>
+              ► Démarrer l'épreuve (Remettre les qualifiés en lice)
+            </button>
+            <a href="/admin" className={`${mono.className} text-sm text-[#9AA0A6] hover:text-[#3FAEC4]`}>
+              ← Retour au Radar
+            </a>
+          </div>
         </header>
 
-        {/* ── Grille des candidats ─────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {submissions.map((sub) => {
-            const isQualified  = sub.status === 'qualified';
-            const isEliminated = sub.status === 'eliminated';
-            const isPending    = sub.status === 'pending';
+        {submissions.length === 0 ? (
+          <div className="text-center py-20 border border-dashed border-[#232931] rounded-2xl">
+            <span className="text-4xl mb-4 block">🍽️</span>
+            <p className={`${mono.className} text-[#6B7178] uppercase tracking-widest text-sm`}>Aucun plat soumis pour le moment</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {submissions.map((sub) => {
+              const isQualified  = sub.status === 'qualified';
+              const isEliminated = sub.status === 'eliminated';
+              const isPending    = sub.status === 'pending';
 
-            const accentColor = isQualified ? '#3FAEC4' : isEliminated ? '#E0524F' : '#D9A441';
+              const accentColor = isQualified ? '#3FAEC4' : isEliminated ? '#E0524F' : '#D9A441';
 
-            return (
-              <div
-                key={sub.id}
-                className={`relative bg-[#11151A] border rounded-2xl overflow-hidden transition-all ${
-                  isQualified  ? 'border-[#3FAEC4]/40 shadow-[0_0_25px_rgba(63,174,196,0.08)]' :
-                  isEliminated ? 'border-[#E0524F]/20 opacity-55 grayscale' :
-                  'border-[#232931] hover:border-[#D9A441]/30'
-                }`}
-              >
-                {/* Barre de couleur en haut */}
-                <div
-                  className="h-[2px] w-full"
-                  style={{ background: `linear-gradient(90deg, ${accentColor}, ${accentColor}55, transparent)` }}
-                />
+              return (
+                <div key={sub.id} className={`relative bg-[#11151A] border rounded-2xl overflow-hidden transition-all ${
+                    isQualified  ? 'border-[#3FAEC4]/40 shadow-[0_0_25px_rgba(63,174,196,0.08)]' :
+                    isEliminated ? 'border-[#E0524F]/20 opacity-55 grayscale' :
+                    'border-[#232931] hover:border-[#D9A441]/30'
+                  }`}
+                >
+                  <div className="h-[2px] w-full" style={{ background: `linear-gradient(90deg, ${accentColor}, ${accentColor}55, transparent)` }} />
 
-                <div className="p-6">
-                  {/* ── Entête candidat ─────────────────────────────────────── */}
-                  <div className="flex items-start gap-4 mb-6 pb-4 border-b border-[#1C2028]">
-                    <div className="relative w-16 h-16 flex-shrink-0">
-                      <div className={`w-full h-full rounded-xl bg-[#1A1E23] overflow-hidden border ${isEliminated ? 'border-[#E0524F]/30' : isQualified ? 'border-[#3FAEC4]/40' : 'border-[#232931]'}`}>
-                        <img
-                          src={sub.photo}
-                          alt={sub.name}
-                          className={`w-full h-full object-cover ${isEliminated ? 'grayscale' : ''}`}
-                        />
+                  <div className="p-6">
+                    <div className="flex items-start gap-4 mb-6 pb-4 border-b border-[#1C2028]">
+                      <div className="relative w-16 h-16 flex-shrink-0">
+                        <div className={`w-full h-full rounded-xl bg-[#1A1E23] overflow-hidden border ${isEliminated ? 'border-[#E0524F]/30' : isQualified ? 'border-[#3FAEC4]/40' : 'border-[#232931]'}`}>
+                          <img src={sub.candidate.photo_url} alt={sub.candidate.name} className={`w-full h-full object-cover ${isEliminated ? 'grayscale' : ''}`} />
+                        </div>
+                        {isPending && <Reticle color="#D9A441" size={10} />}
+                        {isQualified && (
+                          <div className="absolute -bottom-2 -right-2 w-6 h-6 rounded-full bg-[#3FAEC4] border-[3px] border-[#11151A] flex items-center justify-center text-[10px] text-white">✓</div>
+                        )}
+                        {isEliminated && (
+                          <div className="absolute -bottom-2 -right-2 w-6 h-6 rounded-full bg-[#E0524F] border-[3px] border-[#11151A] flex items-center justify-center text-[10px] text-white">✕</div>
+                        )}
                       </div>
-                      <Reticle color={accentColor} size={8} />
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className={`${mono.className} text-[#D9A441] text-[10px] tracking-wider`}>#{sub.candidate.id}</p>
+                          <span className={`${mono.className} text-[9px] uppercase tracking-widest px-2 py-0.5 rounded border ${
+                            isQualified ? 'bg-[#3FAEC4]/10 text-[#3FAEC4] border-[#3FAEC4]/30' :
+                            isEliminated ? 'bg-[#E0524F]/10 text-[#E0524F] border-[#E0524F]/30' :
+                            'bg-[#D9A441]/10 text-[#D9A441] border-[#D9A441]/30 animate-pulse'
+                          }`}>
+                            {isQualified ? 'Admis' : isEliminated ? 'Échoué' : 'À déguster'}
+                          </span>
+                        </div>
+                        <h2 className={`${display.className} text-[#F2EFE9] text-xl uppercase leading-tight truncate`}>{sub.candidate.name}</h2>
+                        <div className="mt-2 bg-[#0B0E11] px-3 py-2 rounded border border-[#232931]">
+                          <p className={`${mono.className} text-[#4A5057] text-[9px] uppercase tracking-widest mb-0.5`}>Plat proposé</p>
+                          <p className={`${display.className} text-lg text-[#E8E6E1] leading-tight`}>« {sub.dish_name} »</p>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex-1 overflow-hidden">
-                      <p className={`${mono.className} text-[10px] uppercase tracking-wider mb-0.5`} style={{ color: accentColor }}>
-                        #{sub.id}
-                      </p>
-                      <h3 className={`${display.className} text-xl uppercase text-[#F2EFE9] truncate`}>
-                        {sub.name}
-                      </h3>
-                      {/* Plat soumis */}
-                      <div className="mt-2 bg-[#0B0E11] border border-[#232931] rounded-lg px-3 py-2">
-                        <p className={`${mono.className} text-[#4A5057] text-[9px] uppercase tracking-widest mb-0.5`}>
-                          Plat soumis
-                        </p>
-                        <p className="text-sm font-bold text-[#3FAEC4] italic">
-                          &ldquo;{sub.dishName}&rdquo;
+                    {isPending ? (
+                      <RatingForm sub={sub} onDecision={handleDecision} />
+                    ) : (
+                      <div className="text-center py-4 bg-[#0B0E11] border border-[#1C2028] rounded-lg">
+                        <p className={`${mono.className} text-xs uppercase tracking-widest ${isQualified ? 'text-[#3FAEC4]' : 'text-[#E0524F]'}`}>
+                          {isQualified ? 'Qualifié pour la suite' : 'Fin de l\'aventure'}
                         </p>
                       </div>
-                    </div>
+                    )}
                   </div>
-
-                  {/* ── Corps : formulaire ou verdict ───────────────────────── */}
-                  {isPending ? (
-                    <RatingForm sub={sub} onDecision={handleDecision} />
-                  ) : (
-                    <div className="relative flex flex-col items-center justify-center py-6 gap-3">
-                      {isQualified && <Reticle color="#3FAEC4" size={10} />}
-
-                      <p
-                        className={`${display.className} text-4xl font-bold uppercase tracking-widest`}
-                        style={{ color: accentColor, textShadow: `0 0 30px ${accentColor}66` }}
-                      >
-                        {isQualified ? 'Qualifié' : 'Éliminé'}
-                      </p>
-
-                      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border`} style={{ borderColor: `${accentColor}33`, background: `${accentColor}10` }}>
-                        <span className="relative flex h-1.5 w-1.5">
-                          {isQualified && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#3FAEC4] opacity-60" />}
-                          <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: accentColor }} />
-                        </span>
-                        <p className={`${mono.className} text-[10px] uppercase tracking-widest`} style={{ color: accentColor }}>
-                          {isQualified ? 'Dossier validé · Prochaine étape' : 'Dossier clôturé · Remettre le badge'}
-                        </p>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* ── Pied de page ───────────────────────────────────────────────────── */}
-        <p className={`${mono.className} text-center text-[#2A3038] text-[9px] uppercase tracking-[0.2em] pt-8`}>
-          HMS · Hunter Management System · v2.0
-        </p>
-
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

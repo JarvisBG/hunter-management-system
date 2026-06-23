@@ -72,8 +72,16 @@ CREATE TABLE IF NOT EXISTS public.cuisine_scores (
 CREATE TABLE IF NOT EXISTS public.badge_hunts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     candidate_id TEXT REFERENCES public.candidates(id) ON DELETE CASCADE,
-    scanned_code TEXT NOT NULL UNIQUE,
+    scanned_code TEXT NOT NULL,
+    points INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 8b. Table Badge_Targets (Cibles assignées à chaque candidat)
+CREATE TABLE IF NOT EXISTS public.badge_targets (
+    candidate_id TEXT PRIMARY KEY REFERENCES public.candidates(id) ON DELETE CASCADE,
+    target_id TEXT REFERENCES public.candidates(id) ON DELETE CASCADE
 );
 
 -- 9. Table Global_Config (Configuration globale du jeu)
@@ -99,6 +107,8 @@ ALTER TABLE public.duels ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cuisine_dishes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cuisine_scores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.badge_hunts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.badge_targets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.badge_hunts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.global_config ENABLE ROW LEVEL SECURITY;
 
 -- Autoriser tout le monde à lire, insérer et modifier pour le développement
@@ -119,7 +129,19 @@ CREATE POLICY "Enable all access for dev" ON public.enigma_responses FOR ALL USI
 CREATE POLICY "Enable all access for dev" ON public.eggs FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for dev" ON public.duels FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for dev" ON public.cuisine_dishes FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Enable all access for dev" ON public.cuisine_scores FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Enable delete for all users" ON "public"."cuisine_scores" AS PERMISSIVE FOR DELETE TO public USING (true);
+
+-- Badges_Hunts
+CREATE POLICY "Enable read access for all users" ON "public"."badge_hunts" AS PERMISSIVE FOR SELECT TO public USING (true);
+CREATE POLICY "Enable insert for all users" ON "public"."badge_hunts" AS PERMISSIVE FOR INSERT TO public WITH CHECK (true);
+CREATE POLICY "Enable update for all users" ON "public"."badge_hunts" AS PERMISSIVE FOR UPDATE TO public USING (true);
+CREATE POLICY "Enable delete for all users" ON "public"."badge_hunts" AS PERMISSIVE FOR DELETE TO public USING (true);
+
+-- Badge_Targets
+CREATE POLICY "Enable read access for all users" ON "public"."badge_targets" AS PERMISSIVE FOR SELECT TO public USING (true);
+CREATE POLICY "Enable insert for all users" ON "public"."badge_targets" AS PERMISSIVE FOR INSERT TO public WITH CHECK (true);
+CREATE POLICY "Enable update for all users" ON "public"."badge_targets" AS PERMISSIVE FOR UPDATE TO public USING (true);
+CREATE POLICY "Enable delete for all users" ON "public"."badge_targets" AS PERMISSIVE FOR DELETE TO public USING (true);
 CREATE POLICY "Enable all access for dev" ON public.badge_hunts FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for dev" ON public.global_config FOR ALL USING (true) WITH CHECK (true);
 

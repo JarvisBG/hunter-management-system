@@ -120,6 +120,22 @@ export default function CandidateSurvivalApp() {
   const [eggSubmitting, setEggSubmitting] = useState(false);
   const [eggStatus, setEggStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null);
 
+  // Duels State
+  const [activeDuel, setActiveDuel] = useState<any>(null);
+  const [opponent, setOpponent] = useState<any>(null);
+
+  // Cuisine State
+  const [dishStatus, setDishStatus] = useState<string | null>(null);
+  const [dishName, setDishName] = useState('');
+  const [dishSubmitting, setDishSubmitting] = useState(false);
+
+  // Badges State
+  const [badgeTarget, setBadgeTarget] = useState<any>(null);
+  const [badgePoints, setBadgePoints] = useState(0);
+  const [badgeCode, setBadgeCode] = useState('');
+  const [badgeSubmitting, setBadgeSubmitting] = useState(false);
+  const [lastHunt, setLastHunt] = useState<any>(null);
+
   useEffect(() => {
     const fetchEggStatus = async () => {
       const { data } = await supabase.from('eggs').select('is_claimed').eq('claimed_by', badgeId).order('created_at', { ascending: false }).limit(1).maybeSingle();
@@ -127,6 +143,78 @@ export default function CandidateSurvivalApp() {
         setEggStatus(data.is_claimed ? 'approved' : 'pending');
       } else {
         setEggStatus(prev => prev === 'pending' || prev === 'rejected' ? 'rejected' : null);
+      }
+    };
+
+    const fetchDuel = async () => {
+      const { data } = await supabase.from('duels')
+        .select('*')
+        .or(`player1_id.eq.${badgeId},player2_id.eq.${badgeId}`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data) {
+        setActiveDuel(data);
+        if (data.status === 'pending') {
+          const opponentId = data.player1_id === badgeId ? data.player2_id : data.player1_id;
+          if (opponentId) {
+            const { data: oppData } = await supabase.from('candidates').select('*').eq('id', opponentId).single();
+            setOpponent(oppData);
+          } else {
+            setOpponent('SOLO');
+          }
+        }
+      } else {
+        setActiveDuel(null);
+        setOpponent(null);
+      }
+    };
+
+    const fetchDish = async () => {
+      const { data } = await supabase.from('cuisine_dishes')
+        .select('*')
+        .eq('candidate_id', badgeId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) {
+        setDishStatus(data.status);
+      } else {
+        setDishStatus(null);
+      }
+    };
+
+    const fetchBadgeData = async () => {
+      // Points
+      const { data: sData } = await supabase.from('badge_hunts')
+        .select('points')
+        .eq('candidate_id', badgeId)
+        .eq('status', 'approved');
+      if (sData) {
+        setBadgePoints(sData.reduce((acc, curr) => acc + curr.points, 0));
+      }
+
+      // Target
+      const { data: tData } = await supabase.from('badge_targets')
+        .select('*')
+        .eq('candidate_id', badgeId)
+        .maybeSingle();
+
+      // Last hunt
+      const { data: hData } = await supabase.from('badge_hunts')
+        .select('*')
+        .eq('candidate_id', badgeId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (hData) setLastHunt(hData);
+      
+      if (tData && tData.target_id) {
+        const { data: cData } = await supabase.from('candidates').select('*').eq('id', tData.target_id).single();
+        setBadgeTarget(cData);
+      } else {
+        setBadgeTarget(null);
       }
     };
 
@@ -141,6 +229,9 @@ export default function CandidateSurvivalApp() {
         setCandidate(data);
       }
       await fetchEggStatus();
+      await fetchDuel();
+      await fetchDish();
+      await fetchBadgeData();
       setLoading(false);
     };
 
@@ -189,12 +280,36 @@ export default function CandidateSurvivalApp() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'global_config', filter: 'id=eq.1' }, (payload) => {
         if (payload.new && payload.new.active_step_id !== undefined) setActiveStepId(payload.new.active_step_id);
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'duels' }, () => fetchDuel())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cuisine_dishes', filter: `candidate_id=eq.${badgeId}` }, () => fetchDish())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'badge_hunts', filter: `candidate_id=eq.${badgeId}` }, () => fetchBadgeData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'badge_targets', filter: `candidate_id=eq.${badgeId}` }, () => fetchBadgeData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'global_config' }, () => fetchGlobalConfig())
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [badgeId]);
+
+  const handleSendDish = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dishName.trim() || dishSubmitting) return;
+    setDishSubmitting(true);
+    await supabase.from('cuisine_dishes').insert({ candidate_id: badgeId, dish_name: dishName.trim(), status: 'pending' });
+    setDishName('');
+    setDishSubmitting(false);
+    setDishStatus('pending');
+  };
+
+  const handleSendBadge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!badgeCode.trim() || badgeSubmitting) return;
+    setBadgeSubmitting(true);
+    await supabase.from('badge_hunts').insert({ candidate_id: badgeId, scanned_code: badgeCode.trim(), status: 'pending' });
+    setBadgeCode('');
+    setBadgeSubmitting(false);
+  };
 
   const handleSendEnigma = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -438,27 +553,59 @@ export default function CandidateSurvivalApp() {
         <span className="text-2xl select-none">🥷</span>
       </div>
 
-      <div className="relative bg-[#0B0E11] border border-[#E0524F]/30 p-5 rounded-xl text-center shadow-[0_0_15px_rgba(224,82,79,0.04)]">
-        <Reticle color="#E0524F" size={8} />
-        <p className={`${mono.className} text-[#E0524F] text-[10px] uppercase tracking-widest mb-4`}>
-          Votre adversaire désigné
-        </p>
-        <div className="flex flex-col items-center gap-2">
-          <div className="relative w-16 h-16">
-            <img
-              src={MOCK_OPPONENT.photo}
-              className="w-full h-full rounded-xl border-2 border-[#E0524F]/50 object-cover"
-              alt="Adversaire"
-            />
-          </div>
-          <h4 className={`${display.className} text-lg text-[#F2EFE9] uppercase`}>{MOCK_OPPONENT.name}</h4>
-          <p className={`${mono.className} text-[#4A5057] text-[10px]`}>Badge #{MOCK_OPPONENT.id}</p>
-        </div>
-        <p className={`${mono.className} text-[#9AA0A6] text-xs mt-4 leading-relaxed`}>
-          Rendez-vous dans la zone de combat.<br />
-          Arrachez son bandeau pour vous qualifier.
-        </p>
-      </div>
+      {!activeDuel ? (
+         <div className="relative bg-[#0B0E11] border border-[#232931] p-5 rounded-xl text-center shadow-[0_0_15px_rgba(217,164,65,0.02)]">
+            <Reticle color="#D9A441" size={8} />
+            <p className={`${mono.className} text-[#D9A441] text-xs uppercase tracking-widest mt-2 animate-pulse`}>Tirage au sort en cours...</p>
+            <p className={`${mono.className} text-[#6B7178] text-[10px] mt-2`}>L'arbitre prépare les combats. Préparez-vous.</p>
+         </div>
+      ) : activeDuel.status === 'completed' ? (
+         <div className="relative bg-[#0B0E11] border border-[#232931] p-5 rounded-xl text-center shadow-[0_0_15px_rgba(217,164,65,0.02)]">
+            <p className={`${mono.className} text-[#6B7178] text-[10px] uppercase tracking-widest`}>Le duel est terminé.</p>
+         </div>
+      ) : opponent === 'SOLO' ? (
+         <div className="relative bg-[#0B0E11] border border-[#D9A441]/30 p-5 rounded-xl text-center shadow-[0_0_15px_rgba(217,164,65,0.04)]">
+            <Reticle color="#D9A441" size={8} />
+            <p className={`${mono.className} text-[#D9A441] text-xs uppercase tracking-widest mb-4`}>Épreuve Spéciale</p>
+            <div className="text-5xl mb-4">👑</div>
+            <h4 className={`${display.className} text-lg text-[#F2EFE9] uppercase`}>Tirage Imparfait</h4>
+            <p className={`${mono.className} text-[#9AA0A6] text-xs mt-4 leading-relaxed`}>
+              Vous êtes le seul combattant de votre zone.<br />
+              Attendez les instructions de l'arbitre.
+            </p>
+         </div>
+      ) : opponent ? (
+         <div className="relative bg-[#0B0E11] border border-[#E0524F]/30 p-5 rounded-xl text-center shadow-[0_0_15px_rgba(224,82,79,0.04)]">
+            <Reticle color="#E0524F" size={8} />
+            <p className={`${mono.className} text-[#E0524F] text-[10px] uppercase tracking-widest mb-4 flex justify-center items-center gap-1.5`}>
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#E0524F] opacity-60" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#E0524F]" />
+              </span>
+              Votre adversaire désigné
+            </p>
+            <div className="flex flex-col items-center gap-2">
+              <div className="relative w-16 h-16">
+                <img
+                  src={opponent.photo_url}
+                  className="w-full h-full rounded-xl border-2 border-[#E0524F]/50 object-cover"
+                  alt="Adversaire"
+                />
+              </div>
+              <h4 className={`${display.className} text-lg text-[#F2EFE9] uppercase`}>{opponent.name}</h4>
+              <p className={`${mono.className} text-[#4A5057] text-[10px]`}>Badge #{opponent.id}</p>
+            </div>
+            <p className={`${mono.className} text-[#9AA0A6] text-xs mt-4 leading-relaxed`}>
+              Rendez-vous dans la zone de combat.<br />
+              Arrachez son bandeau pour vous qualifier.
+            </p>
+         </div>
+      ) : (
+         <div className="relative bg-[#0B0E11] border border-[#232931] p-5 rounded-xl text-center shadow-[0_0_15px_rgba(217,164,65,0.02)]">
+            <Reticle color="#D9A441" size={8} />
+            <p className={`${mono.className} text-[#D9A441] text-xs uppercase tracking-widest mt-2 animate-pulse`}>Chargement...</p>
+         </div>
+      )}
     </div>
   );
 
@@ -476,27 +623,42 @@ export default function CandidateSurvivalApp() {
         Cuisinez le plat imposé. Le jury notera votre création.
       </p>
 
-      <div className="relative bg-[#0B0E11] border border-[#3FAEC4]/20 p-4 rounded-xl">
-        <Reticle color="#3FAEC4" size={8} />
-        <label className={`${mono.className} block text-[10px] font-bold text-[#4A5057] uppercase tracking-widest mb-3`}>
-          Soumission du Plat
-        </label>
-        <div className="flex flex-col gap-2">
-          <input
-            type="text"
-            placeholder="Nom de votre plat finalisé..."
-            className={`${mono.className} w-full bg-[#11151A] border border-[#232931] rounded-xl p-3 text-[#E8E6E1] text-xs placeholder:text-[#2A3038] focus:border-[#3FAEC4] outline-none transition-colors`}
-          />
-          <button className={`${display.className} bg-[#3FAEC4] hover:bg-[#3292A5] text-[#0B0E11] py-3 rounded-xl uppercase font-bold tracking-widest transition-colors`}>
-            Servir au Jury
-          </button>
+      {dishStatus === 'pending' ? (
+         <div className="relative bg-[#0B0E11] border border-[#D9A441]/30 p-5 rounded-xl text-center shadow-[0_0_15px_rgba(217,164,65,0.04)]">
+            <Reticle color="#D9A441" size={8} />
+            <p className={`${mono.className} text-[#D9A441] text-xs uppercase tracking-widest mt-2 animate-pulse`}>Plat soumis</p>
+            <p className={`${mono.className} text-[#6B7178] text-[10px] mt-2`}>En cours de dégustation par le jury...</p>
+         </div>
+      ) : dishStatus === 'qualified' || dishStatus === 'eliminated' ? (
+         <div className="relative bg-[#0B0E11] border border-[#232931] p-5 rounded-xl text-center shadow-[0_0_15px_rgba(217,164,65,0.02)]">
+            <p className={`${mono.className} text-[#6B7178] text-[10px] uppercase tracking-widest`}>Verdict prononcé.</p>
+         </div>
+      ) : (
+        <div className="relative bg-[#0B0E11] border border-[#3FAEC4]/20 p-4 rounded-xl">
+          <Reticle color="#3FAEC4" size={8} />
+          <label className={`${mono.className} block text-[10px] font-bold text-[#4A5057] uppercase tracking-widest mb-3`}>
+            Soumission du Plat
+          </label>
+          <form onSubmit={handleSendDish} className="flex flex-col gap-2">
+            <input
+              type="text"
+              required
+              value={dishName}
+              onChange={e => setDishName(e.target.value)}
+              placeholder="Nom de votre plat finalisé..."
+              className={`${mono.className} w-full bg-[#11151A] border border-[#232931] rounded-xl p-3 text-[#E8E6E1] text-xs placeholder:text-[#2A3038] focus:border-[#3FAEC4] outline-none transition-colors`}
+            />
+            <button disabled={dishSubmitting} type="submit" className={`${display.className} bg-[#3FAEC4] hover:bg-[#3292A5] text-[#0B0E11] py-3 rounded-xl uppercase font-bold tracking-widest transition-colors disabled:opacity-50`}>
+              Servir au Jury
+            </button>
+          </form>
         </div>
-      </div>
+      )}
     </div>
   );
 
   const renderStep4Badges = () => {
-    const pct = Math.round((MOCK_POINTS / 6) * 100);
+    const pct = Math.min(100, Math.round((badgePoints / 6) * 100));
     return (
       <div className="space-y-5">
         <div className="flex justify-between items-start">
@@ -507,55 +669,69 @@ export default function CandidateSurvivalApp() {
           <span className="text-2xl select-none">📛</span>
         </div>
 
+        {badgeTarget && (
+          <div className="relative bg-[#0B0E11] border border-[#E0524F]/30 p-5 rounded-xl text-center shadow-[0_0_15px_rgba(224,82,79,0.04)] mb-4">
+            <Reticle color="#E0524F" size={8} />
+            <p className={`${mono.className} text-[#E0524F] text-[10px] uppercase tracking-widest mb-4 flex justify-center items-center gap-1.5`}>
+              Votre Cible Assignée (3 pts)
+            </p>
+            <div className="flex flex-col items-center gap-2">
+              <div className="relative w-16 h-16">
+                <img src={badgeTarget.photo_url} className="w-full h-full rounded-xl border-2 border-[#E0524F]/50 object-cover" alt="Cible" />
+              </div>
+              <h4 className={`${display.className} text-lg text-[#F2EFE9] uppercase`}>{badgeTarget.name}</h4>
+              <p className={`${mono.className} text-[#4A5057] text-[10px]`}>Badge #{badgeTarget.id}</p>
+            </div>
+          </div>
+        )}
+
         <div className="relative bg-[#0B0E11] border border-[#D9A441]/30 p-4 rounded-xl shadow-[0_0_15px_rgba(217,164,65,0.04)]">
           <Reticle color="#D9A441" size={8} />
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className={`${mono.className} text-[#4A5057] text-[10px] uppercase tracking-widest`}>Points cumulés</p>
               <p className={`${display.className} text-3xl font-bold text-[#D9A441] leading-none mt-1`}>
-                {MOCK_POINTS}
+                {badgePoints}
                 <span className={`${mono.className} text-base text-[#3A4048] ml-1`}>/6</span>
               </p>
             </div>
             <div className="relative w-12 h-12">
               <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
                 <circle cx="18" cy="18" r="15.9" fill="none" stroke="#1C2028" strokeWidth="3" />
-                <circle
-                  cx="18" cy="18" r="15.9" fill="none"
-                  stroke="#D9A441" strokeWidth="3"
-                  strokeDasharray={`${pct} 100`}
-                  strokeLinecap="round"
-                />
+                <circle cx="18" cy="18" r="15.9" fill="none" stroke="#D9A441" strokeWidth="3" strokeDasharray={`${pct} 100`} strokeLinecap="round" />
               </svg>
-              <p className={`${mono.className} absolute inset-0 flex items-center justify-center text-[9px] text-[#D9A441] font-bold`}>
-                {pct}%
-              </p>
+              <p className={`${mono.className} absolute inset-0 flex items-center justify-center text-[9px] text-[#D9A441] font-bold`}>{pct}%</p>
             </div>
           </div>
-          <div className="h-[3px] w-full bg-[#1C2028] rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #D9A441, #D9A44188)' }}
-            />
+          <div className="h-[3px] w-full bg-[#1C2028] rounded-full overflow-hidden mb-4">
+            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #D9A441, #D9A44188)' }} />
           </div>
+
+          {lastHunt && (
+            <div className="bg-[#11151A] rounded-lg p-3 text-center border border-[#232931]">
+              <p className={`${mono.className} text-[9px] uppercase tracking-widest text-[#6B7178] mb-1`}>Dernière soumission</p>
+              <p className={`${mono.className} text-xs font-bold text-[#E8E6E1] mb-1`}>{lastHunt.scanned_code}</p>
+              {lastHunt.status === 'pending' && <p className={`${mono.className} text-[9px] text-[#D9A441] animate-pulse`}>En attente d'arbitrage...</p>}
+              {lastHunt.status === 'approved' && <p className={`${mono.className} text-[9px] text-[#3FAEC4]`}>Validé (+{lastHunt.points} pts)</p>}
+              {lastHunt.status === 'rejected' && <p className={`${mono.className} text-[9px] text-[#E0524F]`}>Refusé</p>}
+            </div>
+          )}
         </div>
 
-        <div className="relative bg-[#0B0E11] border border-[#E0524F]/20 p-4 rounded-xl">
-          <Reticle color="#E0524F" size={8} />
-          <label className={`${mono.className} block text-[10px] font-bold text-[#4A5057] uppercase tracking-widest mb-3`}>
-            Valider une cible
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Code secret du badge volé..."
-              className={`${mono.className} w-full bg-[#11151A] border border-[#232931] rounded-xl p-3 text-[#E8E6E1] text-xs placeholder:text-[#2A3038] focus:border-[#E0524F] outline-none transition-colors`}
-            />
-            <button className={`${display.className} bg-[#E0524F] hover:bg-[#C94744] text-[#0B0E11] px-4 rounded-xl uppercase font-bold tracking-wider transition-colors`}>
-              +
-            </button>
+        {badgePoints < 6 && (
+          <div className="relative bg-[#0B0E11] border border-[#E0524F]/20 p-4 rounded-xl">
+            <Reticle color="#E0524F" size={8} />
+            <label className={`${mono.className} block text-[10px] font-bold text-[#4A5057] uppercase tracking-widest mb-3`}>
+              Soumettre un code volé
+            </label>
+            <form onSubmit={handleSendBadge} className="flex gap-2">
+              <input type="text" value={badgeCode} onChange={e => setBadgeCode(e.target.value)} required placeholder="Ex: BADGE-44..." className={`${mono.className} w-full bg-[#11151A] border border-[#232931] rounded-xl p-3 text-[#E8E6E1] text-xs placeholder:text-[#2A3038] focus:border-[#E0524F] outline-none transition-colors`} />
+              <button type="submit" disabled={badgeSubmitting} className={`${display.className} bg-[#E0524F] hover:bg-[#C94744] text-[#0B0E11] px-4 rounded-xl uppercase font-bold tracking-wider transition-colors disabled:opacity-50`}>
+                +
+              </button>
+            </form>
           </div>
-        </div>
+        )}
       </div>
     );
   };
@@ -629,8 +805,8 @@ export default function CandidateSurvivalApp() {
         <main className="relative bg-[#11151A] border border-[#D9A441]/30 shadow-[0_0_25px_rgba(217,164,65,0.06)] rounded-2xl p-5 mb-6 overflow-hidden">
 
           {/* TAMPON D'OVERLAY DE RÉSULTAT POUR LA SESSION */}
-          {candidate.stepStatus && candidate.stepStatus !== 'pending' && (
-            <StepVisual status={candidate.stepStatus} />
+          {candidate.status !== 'active' && (
+            <StepVisual status={candidate.status as 'qualified' | 'eliminated'} />
           )}
 
           <div className="h-[2px] w-full absolute top-0 left-0 bg-gradient-to-r from-[#D9A441] via-[#D9A441]/40 to-transparent" />
