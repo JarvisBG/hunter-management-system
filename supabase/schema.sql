@@ -94,6 +94,14 @@ CREATE TABLE IF NOT EXISTS public.global_config (
 -- Insérer la configuration par défaut
 INSERT INTO public.global_config (id, active_step_id) VALUES (1, 1) ON CONFLICT (id) DO NOTHING;
 
+-- 10. Table Timeline Events (Journal de bord du Tracker public)
+CREATE TABLE IF NOT EXISTS public.timeline_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message TEXT NOT NULL,
+    type TEXT DEFAULT 'info' CHECK (type IN ('info', 'success', 'warning', 'danger')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- ==========================================
 -- ROW LEVEL SECURITY (RLS) & POLICIES
 -- ==========================================
@@ -144,6 +152,7 @@ CREATE POLICY "Enable update for all users" ON "public"."badge_targets" AS PERMI
 CREATE POLICY "Enable delete for all users" ON "public"."badge_targets" AS PERMISSIVE FOR DELETE TO public USING (true);
 CREATE POLICY "Enable all access for dev" ON public.badge_hunts FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for dev" ON public.global_config FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for dev" ON public.timeline_events FOR ALL USING (true) WITH CHECK (true);
 
 -- ==========================================
 -- ENABLE REALTIME
@@ -163,6 +172,7 @@ alter publication supabase_realtime add table public.cuisine_dishes;
 alter publication supabase_realtime add table public.cuisine_scores;
 alter publication supabase_realtime add table public.badge_hunts;
 alter publication supabase_realtime add table public.global_config;
+alter publication supabase_realtime add table public.timeline_events;
 
 -- ==========================================
 -- STORAGE BUCKETS

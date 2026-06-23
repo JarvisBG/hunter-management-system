@@ -66,8 +66,10 @@ const EXAM_STEPS = [
 ];
 
 export default function StepsController() {
-  const [activeStepId, setActiveStepId] = useState<number>(1);
+  const [activeStepId, setActiveStepId] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
+  const [timelineMsg, setTimelineMsg] = useState('');
+  const [timelineType, setTimelineType] = useState('info');
 
   const fetchActiveStep = async () => {
     setLoading(true);
@@ -123,6 +125,23 @@ export default function StepsController() {
       alert('Erreur lors de la mise à jour : ' + error.message);
     } else {
       setActiveStepId(stepId);
+    }
+  };
+
+  const publishTimelineEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!timelineMsg.trim()) return;
+
+    const { error } = await supabase.from('timeline_events').insert([{
+      message: timelineMsg,
+      type: timelineType
+    }]);
+
+    if (error) {
+      alert("Erreur lors de l'envoi : " + error.message);
+    } else {
+      setTimelineMsg('');
+      alert("Événement publié avec succès sur le Tracker !");
     }
   };
 
@@ -322,6 +341,41 @@ export default function StepsController() {
             })}
           </div>
         )}
+
+        {/* --- DIFFUSION TIMELINE --- */}
+        <div className="bg-[#11151A] border border-[#232931] rounded-2xl p-6 md:p-8 mt-10">
+          <h2 className={`${display.className} text-2xl font-semibold text-[#F2EFE9] mb-6 flex items-center gap-3`}>
+            <span className="text-[#3FAEC4]">📻</span> Annonces Publiques (Tracker)
+          </h2>
+
+          <form onSubmit={publishTimelineEvent} className="flex flex-col md:flex-row gap-4">
+            <input
+              type="text"
+              value={timelineMsg}
+              onChange={(e) => setTimelineMsg(e.target.value)}
+              placeholder="Ex: Gon vient d'éliminer Hisoka..."
+              required
+              className={`${mono.className} flex-1 bg-[#0B0E11] border border-[#232931] rounded-lg p-3 text-[#E8E6E1] placeholder:text-[#4A5057] focus:border-[#3FAEC4] focus:ring-1 focus:ring-[#3FAEC4] outline-none text-sm`}
+            />
+            <select
+              value={timelineType}
+              onChange={(e) => setTimelineType(e.target.value)}
+              className={`${mono.className} bg-[#0B0E11] border border-[#232931] rounded-lg p-3 text-[#E8E6E1] focus:border-[#3FAEC4] outline-none text-sm`}
+            >
+              <option value="info">Info (Bleu/Gris)</option>
+              <option value="success">Succès (Vert)</option>
+              <option value="warning">Alerte (Or)</option>
+              <option value="danger">Danger (Rouge)</option>
+            </select>
+            <button
+              type="submit"
+              className={`${display.className} bg-[#3FAEC4] text-[#0B0E11] px-6 py-3 rounded-lg font-bold uppercase tracking-widest hover:bg-[#2C8A9E] transition-colors`}
+            >
+              Diffuser
+            </button>
+          </form>
+        </div>
+
       </div>
     </div>
   );

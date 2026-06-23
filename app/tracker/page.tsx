@@ -1,40 +1,23 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Oswald, JetBrains_Mono } from 'next/font/google';
+import { supabase } from '@/lib/supabase';
 
 const display = Oswald({ subsets: ['latin'], weight: ['500', '600', '700'] });
 const mono = JetBrains_Mono({ subsets: ['latin'], weight: ['400', '500', '700'] });
 
-// --- FAUSSE BASE DE DONNÉES (MOCKS) ---
-const MOCK_CANDIDATES = [
-  { id: '405', name: 'Gon Freecss',    photo_url: 'https://i.pinimg.com/736x/87/a7/6c/87a76c66914562c5e5330de9910dd2b6.jpg', status: 'active' },
-  { id: '99',  name: 'Killua Zoldyck', photo_url: 'https://i.pinimg.com/736x/a2/e8/cf/a2e8cfaeb63b3ea595d2c2b3e8e19c3d.jpg', status: 'qualified' },
-  { id: '44',  name: 'Hisoka Morow',   photo_url: 'https://i.pinimg.com/736x/bd/ec/bd/bdecbda1e53ec9d9ff7b5791694f4df7.jpg', status: 'active' },
-  { id: '404', name: 'Kurapika',        photo_url: 'https://i.pinimg.com/736x/60/0a/63/600a6311de1b453e00cfbe31d6833c84.jpg', status: 'active' },
-  { id: '403', name: 'Leorio',          photo_url: 'https://i.pinimg.com/736x/91/9f/fa/919ffac758837332d96c8053a4792c30.jpg', status: 'active' },
-  { id: '16',  name: 'Tonpa',           photo_url: 'https://i.pinimg.com/736x/55/e8/dd/55e8dd415b3aabce8beab0af77983636.jpg', status: 'eliminated' },
-  { id: '294', name: 'Hanzo',           photo_url: 'https://i.pinimg.com/736x/1d/a3/de/1da3de166e5f385c9636a2cd8b3f81e7.jpg', status: 'eliminated' },
-  { id: '53',  name: 'Pokkle',          photo_url: 'https://i.pinimg.com/736x/e4/cc/ba/e4ccbaf915c267ef22a76f28b4de88bb.jpg', status: 'eliminated' },
-];
-
-const MOCK_TIMELINE = [
-  { time: '14:30', text: "Le jury déclare 3 candidats éliminés à l'épreuve de cuisine.", type: 'danger' },
-  { time: '13:15', text: "L'Étape III : L'art de l'adaptation commence !", type: 'info' },
-  { time: '12:00', text: "Fin de l'étape des Bandeaux. 15 survivants restants.", type: 'warning' },
-  { time: '10:05', text: "Candidat #16 (Tonpa) éliminé par abandon.", type: 'danger' },
-  { time: '09:00', text: "Début officiel de l'Examen Hunter 2026.", type: 'success' },
-];
-
-const ACTIVE_STEP_MOCK = {
-  id: 3,
-  title: "CUISINE : L'ART DE L'ADAPTATION",
-  location: 'Zone Culinaire',
-  description: "Les candidats doivent cuisiner un plat imposé sous pression. Le jury notera le goût, la présentation et l'organisation.",
-  icon: '🍳',
+// --- DICTIONNAIRE DES ÉTAPES ---
+const STEPS_DATA: Record<number, any> = {
+  0: { title: "EN ATTENTE", location: "Lobby", description: "L'épreuve est actuellement en pause. Veuillez patienter.", icon: "⏸️" },
+  1: { title: "COURSE D'ENDURANCE", location: "Zone devinée", description: "Les participants doivent courir sur un parcours défini. Seuls les premiers arrivés se qualifient pour l'étape suivante.", icon: "🥚" },
+  2: { title: "DUEL DE BANDEAUX (RATTRAPAGE)", location: "Montagne de la Mort", description: "Dans un cercle défini, récupérez le bandeau de votre binôme ou poussez-le hors de la zone.", icon: "💪🏽" },
+  3: { title: "JURY CULINAIRE", location: "Zone Gastronomique", description: "Les candidats doivent cuisiner un plat imposé sous pression. Le jury notera le goût, la présentation et l'organisation.", icon: "🍳" },
+  4: { title: "CHASSE AUX BADGES", location: "Forêt de Zevil", description: "Chaque candidat doit traquer sa cible tout en protégeant son propre badge.", icon: "🎯" },
+  5: { title: "BRIGADE FANTÔME", location: "Bataille Royale", description: "Dernière épreuve. Éliminez les cibles. Survivez. Ne laissez personne s'échapper.", icon: "🔫" },
 };
 
-// ─── Coin de visée (identique à admin/page.tsx) ───────────────────────────────
+// ─── Coin de visée ───────────────────────────────
 function Reticle({ color, size = 12 }: { color: string; size?: number }) {
   const b = 2;
   return (
@@ -47,32 +30,61 @@ function Reticle({ color, size = 12 }: { color: string; size?: number }) {
   );
 }
 
-// ─── Fond scanline + vignette (identique à admin/page.tsx) ───────────────────
+// ─── Fond scanline + vignette ───────────────────
 function Backdrop({ tint }: { tint?: string }) {
   return (
     <>
-      <div
-        className="pointer-events-none fixed inset-0 opacity-[0.04] z-0"
-        style={{ backgroundImage: 'repeating-linear-gradient(0deg, #fff 0px, #fff 1px, transparent 1px, transparent 3px)' }}
-      />
+      <div className="pointer-events-none fixed inset-0 opacity-[0.04] z-0" style={{ backgroundImage: 'repeating-linear-gradient(0deg, #fff 0px, #fff 1px, transparent 1px, transparent 3px)' }} />
       {tint && (
-        <div
-          className="pointer-events-none fixed inset-0 z-0"
-          style={{ background: `radial-gradient(ellipse at top, ${tint}, transparent 55%)` }}
-        />
+        <div className="pointer-events-none fixed inset-0 z-0" style={{ background: `radial-gradient(ellipse at top, ${tint}, transparent 55%)` }} />
       )}
     </>
   );
 }
 
 export default function HunterTrackerPublic() {
+  const [candidates, setCandidates] = useState<any[]>([]);
+  const [activeStepId, setActiveStepId] = useState<number>(0);
+  const [timeline, setTimeline] = useState<any[]>([]);
+
+  const fetchAllData = async () => {
+    // 1. Fetch Candidates
+    const { data: cData } = await supabase.from('candidates').select('*').order('id', { ascending: true });
+    if (cData) setCandidates(cData);
+
+    // 2. Fetch Config
+    const { data: gData } = await supabase.from('global_config').select('active_step_id').eq('id', 1).single();
+    if (gData) setActiveStepId(gData.active_step_id);
+
+    // 3. Fetch Timeline
+    const { data: tData } = await supabase.from('timeline_events').select('*').order('created_at', { ascending: false }).limit(10);
+    if (tData) setTimeline(tData);
+  };
+
+  useEffect(() => {
+    fetchAllData();
+
+    const channel = supabase.channel('public_tracker')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidates' }, fetchAllData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'global_config' }, fetchAllData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'timeline_events' }, fetchAllData)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   const stats = useMemo(() => {
-    const total = MOCK_CANDIDATES.length;
-    const eliminated = MOCK_CANDIDATES.filter(c => c.status === 'eliminated').length;
+    const total = candidates.length;
+    if (total === 0) return { total: 0, survivors: 0, survivalRate: 0 };
+    const eliminated = candidates.filter(c => c.status === 'eliminated').length;
     const survivors = total - eliminated;
     const survivalRate = Math.round((survivors / total) * 100);
     return { total, survivors, survivalRate };
-  }, []);
+  }, [candidates]);
+
+  const activeStep = STEPS_DATA[activeStepId] || STEPS_DATA[0];
+
+  const totalInscrits = Array.isArray(candidates) ? candidates.length : 0;
 
   return (
     <div className="min-h-screen bg-[#0B0E11] text-[#E8E6E1] relative selection:bg-[#D9A441]/30 pb-20">
@@ -164,24 +176,24 @@ export default function HunterTrackerPublic() {
               <div className="flex justify-between items-start mb-2">
                 <div>
                   <p className={`${mono.className} text-[#6B7178] text-[10px] uppercase tracking-widest mb-1`}>
-                    Étape {String(ACTIVE_STEP_MOCK.id).padStart(2, '0')}
+                    Étape {String(activeStepId).padStart(2, '0')}
                   </p>
                   <h3 className={`${display.className} text-[#F2EFE9] text-xl font-bold uppercase leading-tight`}>
-                    {ACTIVE_STEP_MOCK.title}
+                    {activeStep.title}
                   </h3>
                 </div>
                 <div className="text-3xl bg-[#0B0E11] p-2 rounded-lg border border-[#232931]">
-                  {ACTIVE_STEP_MOCK.icon}
+                  {activeStep.icon}
                 </div>
               </div>
 
               <p className={`${mono.className} text-[#D9A441]/70 text-[10px] uppercase tracking-widest mt-3 mb-2 flex items-center gap-1.5`}>
-                <span className="text-[#D9A441]">📍</span> {ACTIVE_STEP_MOCK.location}
+                <span className="text-[#D9A441]">📍</span> {activeStep.location}
               </p>
 
               <div className="bg-[#0B0E11] border border-[#232931] rounded-lg p-3">
                 <p className="text-xs text-[#C5C2BB] leading-relaxed">
-                  {ACTIVE_STEP_MOCK.description}
+                  {activeStep.description}
                 </p>
               </div>
             </div>
@@ -193,28 +205,35 @@ export default function HunterTrackerPublic() {
                 <span className="text-[#D9A441]">#</span> Journal de bord
               </h2>
               <div className="space-y-4">
-                {MOCK_TIMELINE.map((event, idx) => (
-                  <div key={idx} className="flex gap-3 text-sm">
-                    <span className={`${mono.className} text-[#6B7178] text-[11px] mt-0.5 whitespace-nowrap`}>
-                      {event.time}
-                    </span>
-                    <div className="flex items-start gap-2 flex-1">
-                      <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                        event.type === 'danger'  ? 'bg-[#E0524F] shadow-[0_0_6px_#E0524F]' :
-                        event.type === 'success' ? 'bg-[#5FA876] shadow-[0_0_6px_#5FA876]' :
-                        event.type === 'warning' ? 'bg-[#D9A441] shadow-[0_0_6px_#D9A441]' :
-                        'bg-[#6B7178]'
-                      }`} />
-                      <p className={`text-xs ${
-                        event.type === 'danger'  ? 'text-[#E0524F]' :
-                        event.type === 'success' ? 'text-[#5FA876]' :
-                        event.type === 'warning' ? 'text-[#D9A441]' : 'text-[#C5C2BB]'
-                      }`}>
-                        {event.text}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                {timeline.length === 0 ? (
+                  <p className={`${mono.className} text-[#6B7178] text-xs text-center py-4`}>
+                    Aucun événement récent.
+                  </p>
+                ) : (
+                  timeline.map((event: any) => {
+                    const timeString = new Date(event.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                    return (
+                      <div key={event.id} className="flex gap-3 text-sm">
+                        <span className={`${mono.className} text-[#6B7178] text-[11px] mt-0.5 whitespace-nowrap`}>
+                          {timeString}
+                        </span>
+                        <div className="flex items-start gap-2 flex-1">
+                          <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${event.type === 'danger' ? 'bg-[#E0524F] shadow-[0_0_6px_#E0524F]' :
+                            event.type === 'success' ? 'bg-[#5FA876] shadow-[0_0_6px_#5FA876]' :
+                              event.type === 'warning' ? 'bg-[#D9A441] shadow-[0_0_6px_#D9A441]' :
+                                'bg-[#6B7178]'
+                            }`} />
+                          <p className={`text-xs ${event.type === 'danger' ? 'text-[#E0524F]' :
+                            event.type === 'success' ? 'text-[#5FA876]' :
+                              event.type === 'warning' ? 'text-[#D9A441]' : 'text-[#C5C2BB]'
+                            }`}>
+                            {event.message}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -241,26 +260,25 @@ export default function HunterTrackerPublic() {
               </h2>
               <div className="flex items-center gap-3">
                 <span className={`${mono.className} text-[10px] text-[#6B7178] uppercase tracking-widest`}>
-                  {MOCK_CANDIDATES.length} inscrits
+                  {candidates.length} inscrits
                 </span>
               </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 md:gap-5">
-              {MOCK_CANDIDATES.map((candidate) => {
+              {candidates.map((candidate: any) => {
                 const isEliminated = candidate.status === 'eliminated';
-                const isQualified  = candidate.status === 'qualified';
+                const isQualified = candidate.status === 'qualified';
 
                 return (
                   <div
                     key={candidate.id}
-                    className={`relative group overflow-hidden rounded-xl border transition-all duration-300 ${
-                      isEliminated
-                        ? 'border-[#E0524F]/30 bg-[#1A0E0E]'
-                        : isQualified
+                    className={`relative group overflow-hidden rounded-xl border transition-all duration-300 ${isEliminated
+                      ? 'border-[#E0524F]/30 bg-[#1A0E0E]'
+                      : isQualified
                         ? 'border-[#3FAEC4]/50 bg-[#111A1C] hover:border-[#3FAEC4]/80 hover:shadow-[0_0_20px_rgba(63,174,196,0.15)]'
                         : 'border-[#232931] bg-[#11151A] hover:border-[#D9A441]/50 hover:shadow-[0_0_20px_rgba(217,164,65,0.1)]'
-                    }`}
+                      }`}
                   >
                     {/* Reticle sur les cartes actives/qualifiées */}
                     {!isEliminated && (
@@ -274,9 +292,8 @@ export default function HunterTrackerPublic() {
                       <img
                         src={candidate.photo_url}
                         alt={candidate.name}
-                        className={`w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 ${
-                          isEliminated ? 'grayscale opacity-30' : ''
-                        }`}
+                        className={`w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 ${isEliminated ? 'grayscale opacity-30' : ''
+                          }`}
                       />
 
                       {/* X overlay si éliminé */}
@@ -293,9 +310,8 @@ export default function HunterTrackerPublic() {
                     <div className="absolute bottom-0 w-full p-3 bg-gradient-to-t from-[#0B0E11] via-[#0B0E11]/95 to-transparent pt-10">
                       <div className="flex justify-between items-end">
                         <div className="overflow-hidden pr-2">
-                          <p className={`${mono.className} font-bold text-xs ${
-                            isEliminated ? 'text-[#E0524F]' : isQualified ? 'text-[#3FAEC4]' : 'text-[#D9A441]'
-                          }`}>
+                          <p className={`${mono.className} font-bold text-xs ${isEliminated ? 'text-[#E0524F]' : isQualified ? 'text-[#3FAEC4]' : 'text-[#D9A441]'
+                            }`}>
                             #{candidate.id}
                           </p>
                           <h3 className={`${display.className} text-[#F2EFE9] text-sm md:text-lg font-bold uppercase truncate`}>

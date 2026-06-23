@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { JetBrains_Mono, Oswald } from 'next/font/google';
+import { adminLogout } from '@/app/actions/auth';
 
 const display = Oswald({ subsets: ['latin'], weight: ['600', '700'] });
 const mono = JetBrains_Mono({ subsets: ['latin'], weight: ['500', '700'] });
@@ -22,6 +23,11 @@ const NAV_ITEMS = [
 export default function AdminNav() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+
+  // Ne pas afficher la navigation sur la page de connexion
+  if (pathname === '/admin/login') {
+    return null;
+  }
 
   // Détecte quel est l'onglet actuellement actif
   const activeItem = NAV_ITEMS.find(item => pathname === item.href) || NAV_ITEMS[0];
@@ -60,6 +66,14 @@ export default function AdminNav() {
               </Link>
             );
           })}
+          
+          {/* Bouton Déconnexion */}
+          <button
+            onClick={() => adminLogout()}
+            className={`${mono.className} ml-4 flex items-center px-4 text-[11px] font-bold uppercase tracking-wider text-[#E0524F] hover:bg-[#E0524F]/10 transition-colors h-16`}
+          >
+            Déconnexion
+          </button>
         </nav>
 
         {/* Bouton de bascule Mobile (Hamburger Tactique) */}
@@ -100,6 +114,17 @@ export default function AdminNav() {
               </Link>
             );
           })}
+          
+          <button
+            onClick={() => {
+              setIsOpen(false);
+              adminLogout();
+            }}
+            className={`${mono.className} block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-wide rounded-lg text-[#E0524F] hover:bg-[#E0524F]/10 transition-all`}
+          >
+            <span className="inline-block w-2 h-2 rounded-full mr-3 bg-[#E0524F]" />
+            Déconnexion
+          </button>
         </div>
       </div>
     </div>
