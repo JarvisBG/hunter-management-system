@@ -2,27 +2,34 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
-  // On ne protège que les chemins commençant par /admin
+  // Protection des routes /admin/*
   if (request.nextUrl.pathname.startsWith('/admin')) {
-    // Si on est déjà sur la page de login, on laisse passer
     if (request.nextUrl.pathname === '/admin/login') {
       return NextResponse.next();
     }
-
-    // On vérifie le cookie de session Admin
     const adminSession = request.cookies.get('hms_admin_session');
-
-    // S'il n'y a pas de session, on redirige vers /admin/login
     if (!adminSession || adminSession.value !== 'authenticated') {
-      const loginUrl = new URL('/admin/login', request.url);
-      return NextResponse.redirect(loginUrl);
+      return NextResponse.redirect(new URL('/admin/login', request.url));
     }
   }
 
-  // Pour tout le reste, on laisse passer (ex: /tracker, /candidat/*)
+  // Protection des routes /candidat/*
+  if (request.nextUrl.pathname.startsWith('/candidat/')) {
+    const parts = request.nextUrl.pathname.split('/');
+    const requestedId = parts[2]; // /candidat/123 -> parts: ["", "candidat", "123"]
+
+    const candidateSession = request.cookies.get('hms_candidate_session');
+
+    // Si pas de session, ou si la session ne correspond pas à l'ID demandé
+    if (!candidateSession || candidateSession.value !== requestedId) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  }
+
+  // Pour tout le reste, on laisse passer (ex: /tracker)
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: '/admin/:path*',
+  matcher: ['/admin/:path*', '/candidat/:path*'],
 };

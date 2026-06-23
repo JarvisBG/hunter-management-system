@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Oswald, JetBrains_Mono } from 'next/font/google';
-import { supabase } from '@/lib/supabase';
+import { candidateLogin } from '@/app/actions/auth';
 
 const display = Oswald({ subsets: ['latin'], weight: ['500', '600', '700'] });
 const mono = JetBrains_Mono({ subsets: ['latin'], weight: ['400', '500', '700'] });
@@ -43,37 +43,22 @@ export default function CandidateLogin() {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [passcode, setPasscode] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const [showPass, setShowPass] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setErrorMsg('');
 
-    // Fetch candidate by id (passcode)
-    const { data: candidate, error } = await supabase
-      .from('candidates')
-      .select('*')
-      .eq('id', passcode)
-      .single();
-
-    if (error || !candidate) {
-      setErrorMsg('Code secret invalide ou candidat introuvable.');
-      setLoading(false);
-      return;
-    }
-
-    // Verify name (case-insensitive for convenience)
-    if (candidate.name.toLowerCase() !== username.toLowerCase()) {
-      setErrorMsg('Identifiant incorrect pour ce code.');
-      setLoading(false);
-      return;
-    }
-
-    // Success: redirect to candidate session
-    router.push(`/candidat/${candidate.id}`);
+    startTransition(async () => {
+      const result = await candidateLogin(username, passcode);
+      if (result.error) {
+        setErrorMsg(result.error);
+      } else if (result.success) {
+        router.push(`/candidat/${result.candidateId}`);
+      }
+    });
   };
 
   return (
@@ -184,20 +169,22 @@ export default function CandidateLogin() {
               </div>
             )}
 
-            {/* Bouton submit */}
+            {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading}
-              className={`${display.className} w-full relative overflow-hidden bg-[#D9A441] hover:bg-[#C2922F] text-[#0B0E11] font-bold py-3.5 rounded-lg uppercase tracking-widest transition-all disabled:opacity-60 mt-2 shadow-[0_0_20px_rgba(217,164,65,0.25)] hover:shadow-[0_0_30px_rgba(217,164,65,0.4)]`}
+              disabled={isPending}
+              className={`${display.className} relative w-full group overflow-hidden rounded-lg bg-[#D9A441] text-[#0B0E11] px-4 py-3 font-bold uppercase tracking-widest hover:bg-[#C2922F] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(217,164,65,0.2)] hover:shadow-[0_0_25px_rgba(217,164,65,0.4)]`}
             >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-[#0B0E11]/40 border-t-[#0B0E11] rounded-full animate-spin" />
-                  Vérification...
-                </span>
-              ) : (
-                'Ouvrir la session'
-              )}
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                {isPending ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-[#0B0E11]/40 border-t-[#0B0E11] rounded-full animate-spin" />
+                    Vérification...
+                  </>
+                ) : (
+                  'Ouvrir la session'
+                )}
+              </span>
             </button>
           </div>
 

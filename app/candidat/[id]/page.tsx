@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Oswald, JetBrains_Mono } from 'next/font/google';
 import { supabase } from '@/lib/supabase';
+import { candidateLogout } from '@/app/actions/auth';
 
 const display = Oswald({ subsets: ['latin'], weight: ['500', '600', '700'] });
 const mono = JetBrains_Mono({ subsets: ['latin'], weight: ['400', '500', '700'] });
@@ -899,9 +900,17 @@ export default function CandidateSurvivalApp() {
         )}
 
         {/* ── Pied de page ────────────────────────────────────────────────── */}
-        <p className={`${mono.className} text-center text-[#2A3038] text-[9px] uppercase tracking-[0.2em] pt-8`}>
-          HMS · Hunter Management System · v2.0
-        </p>
+        <div className="pt-8 flex flex-col items-center gap-4">
+          <button
+            onClick={() => candidateLogout()}
+            className={`${mono.className} text-[10px] uppercase font-bold tracking-widest text-[#E0524F] border border-[#E0524F]/30 bg-[#1A0E0E] px-4 py-2 rounded-lg hover:bg-[#E0524F] hover:text-[#0B0E11] transition-all`}
+          >
+            Se déconnecter
+          </button>
+          <p className={`${mono.className} text-center text-[#2A3038] text-[9px] uppercase tracking-[0.2em]`}>
+            HMS · Hunter Management System · v2.0
+          </p>
+        </div>
 
       </div>
     </div>
