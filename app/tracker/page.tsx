@@ -310,10 +310,6 @@ export default function HunterTrackerPublic() {
                     <div className="absolute bottom-0 w-full p-3 bg-gradient-to-t from-[#0B0E11] via-[#0B0E11]/95 to-transparent pt-10">
                       <div className="flex justify-between items-end">
                         <div className="overflow-hidden pr-2">
-                          <p className={`${mono.className} font-bold text-xs ${isEliminated ? 'text-[#E0524F]' : isQualified ? 'text-[#3FAEC4]' : 'text-[#D9A441]'
-                            }`}>
-                            #{candidate.id}
-                          </p>
                           <h3 className={`${display.className} text-[#F2EFE9] text-sm md:text-lg font-bold uppercase truncate`}>
                             {candidate.name}
                           </h3>
